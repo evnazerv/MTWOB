@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('nt', {
   exportReport: (format, days) => ipcRenderer.invoke('report:export', { format, days }),
   cacheMedia: (url) => ipcRenderer.invoke('media:cache', url),
   openExternal: (url) => ipcRenderer.invoke('open:external', url),
+  confirm: (message, okLabel) => ipcRenderer.invoke('confirm', message, okLabel),
   notify: (title, body) => ipcRenderer.invoke('notify', title, body),
   // push events from main
   onStatus: subscribe('status:update'),

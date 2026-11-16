@@ -203,7 +203,7 @@ function harvestGA4_(toolKey, blogLogs, rows, ts, date) {
       if (!mv) return;
       rows.push({
         ts: ts, date: date, source: 'BLOG', queue_id: l.queue_id, external_id: l.external_id, metro: l.metro, pillar: l.pillar, hook_variant: l.hook_variant,
-        views: num_(mv[0].value), clicks: num_(mv[1].value), sessions: num_(mv[1].value), engaged_sessions: num_(mv[2].value), conversions: num_(mv[3].value)
+        views: num_(mv[0].value), sessions: num_(mv[1].value), engaged_sessions: num_(mv[2].value), conversions: num_(mv[3].value)
       });
       out.blog_rows++;
     });
@@ -246,7 +246,7 @@ function reach_(m) { return Math.max(num_(m.impressions), num_(m.views)); }
 /** Best past hooks by engagement rate — fed back into Claude prompts (A/B optimisation loop). */
 function topHooks_(n) {
   var latest = {};
-  latestBy_(dbReadAll_(TABS.METRICS).filter(function (m) { return m.source !== 'GA4' && m.external_id; }), function (m) { return m.source + '|' + m.external_id; })
+  latestBy_(dbReadAll_(TABS.METRICS).filter(function (m) { return m.source !== 'GA4' && m.source !== 'BLOG' && m.external_id; }), function (m) { return m.source + '|' + m.external_id; })
     .forEach(function (m) { latest[m.source + '|' + m.external_id] = m; });
   return dbReadAll_(TABS.PUBLISHED).map(function (l) {
     var m = latest[l.platform + '|' + l.external_id];
@@ -331,7 +331,7 @@ function getDashboard(payload) {
   // ── A/B hook win rates ──
   var ab = {};
   social.forEach(function (m) {
-    if (m.hook_variant !== 'A' && m.hook_variant !== 'B') return;
+    if (m.source === 'BLOG' || (m.hook_variant !== 'A' && m.hook_variant !== 'B')) return; // blog hooks are measured through their social cross-posts
     var a = ab[m.source] || (ab[m.source] = { A: { n: 0, reach: 0, eng: 0 }, B: { n: 0, reach: 0, eng: 0 } });
     a[m.hook_variant].n++; a[m.hook_variant].reach += reach_(m); a[m.hook_variant].eng += engagements_(m);
   });

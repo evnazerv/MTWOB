@@ -156,7 +156,7 @@ function getToolStates() {
       key: t.key, label: t.label, group: t.group, enabled: enabled, creds_ok: credsOk,
       status: !credsOk ? 'Missing API Key' : (enabled ? 'Active' : 'Paused'),
       last_run: s.last_run || '', runs: s.runs || 0,
-      usage_units: s.units || 0, usage_unit_type: s.unit_type || '', est_cost_usd: Math.round((s.cost || 0) * 10000) / 10000
+      usage_units: s.units || 0, usage_unit_type: s.unit_type || '', claude_tokens: s.tokens || 0, est_cost_usd: Math.round((s.cost || 0) * 10000) / 10000
     };
   });
 }
@@ -230,8 +230,10 @@ function tickReliability_(service, ok) {
 }
 
 function recordToolRun_(toolKey, units, unitType, cost) {
-  var t = RUNTIME_.tools[toolKey] || (RUNTIME_.tools[toolKey] = { runs: 0, units: 0, cost: 0, unit_type: unitType });
-  t.runs++; t.units += units || 0; t.cost += cost || 0; t.unit_type = unitType || t.unit_type;
+  var t = RUNTIME_.tools[toolKey] || (RUNTIME_.tools[toolKey] = { runs: 0, units: 0, tokens: 0, cost: 0, unit_type: '' });
+  t.runs++; t.cost += cost || 0;
+  if (unitType === 'tokens') t.tokens += units || 0;           // Claude tokens are tracked separately from posts/characters/videos
+  else { t.units += units || 0; t.unit_type = unitType || t.unit_type; }
 }
 
 /** Persists per-execution counters (called from dispatch_ and every cron runner's finally block). */
@@ -254,7 +256,7 @@ function flushRuntimeStats_() {
     toolKeys.forEach(function (k) {
       var s = stats[k] || { runs: 0, units: 0, cost: 0 };
       var t = RUNTIME_.tools[k];
-      stats[k] = { last_run: nowIso_(), runs: s.runs + t.runs, units: s.units + t.units, cost: s.cost + t.cost, unit_type: t.unit_type || s.unit_type };
+      stats[k] = { last_run: nowIso_(), runs: s.runs + t.runs, units: s.units + t.units, tokens: (s.tokens || 0) + t.tokens, cost: s.cost + t.cost, unit_type: t.unit_type || s.unit_type || '' };
     });
     setJsonProp_('TOOL_STATS', stats);
     syncToolStatesSheet_();

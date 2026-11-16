@@ -308,6 +308,10 @@ function registerIpc() {
   ipcMain.handle('report:export', (_e, opts) => exportReport({ format: ['csv', 'json', 'pdf'].includes(opts && opts.format) ? opts.format : 'csv', days: Number(opts && opts.days) || 30 }));
   ipcMain.handle('media:cache', (_e, url) => cacheMedia(String(url)));
   ipcMain.handle('open:external', (_e, url) => { if (/^https:\/\//i.test(String(url))) shell.openExternal(String(url)); });
+  ipcMain.handle('confirm', async (_e, message, okLabel) => {
+    const r = await dialog.showMessageBox(win, { type: 'question', buttons: ['Cancel', String(okLabel || 'Continue')], defaultId: 1, cancelId: 0, message: String(message) });
+    return r.response === 1;
+  });
   ipcMain.handle('notify', (_e, title, body) => notify(String(title), String(body || '')));
 }
 
