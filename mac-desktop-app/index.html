@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' file:; frame-src 'self' about:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="color-scheme" content="light dark">
+  <title>NodeTelehealth Marketing</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Persistent top status bar + Emergency Hard-Off Kill Switch -->
+  <header id="topbar">
+    <div class="brand">
+      <img src="assets/icon.png" alt="" width="26" height="26">
+      <div>
+        <div class="brand-name">NodeTelehealth Marketing</div>
+        <div class="brand-sub">Florida organic growth engine</div>
+      </div>
+    </div>
+    <div class="status-cluster">
+      <div class="pill" id="hb-pill" title="Backend heartbeat"><span class="dot" id="hb-dot"></span><span id="hb-text">Not connected</span></div>
+      <div class="pill" id="trigger-pill" title="Time-driven triggers on Google's servers"><span id="trigger-text">—</span></div>
+      <div class="pill subtle" id="mode-pill" hidden></div>
+    </div>
+    <button id="kill-switch" class="kill" role="switch" aria-checked="false" aria-label="Emergency hard off kill switch" disabled>
+      <span class="kill-track"><span class="kill-knob"></span></span>
+      <span class="kill-labels"><span class="kill-title">EMERGENCY HARD OFF</span><span class="kill-state" id="kill-state">Not connected</span></span>
+    </button>
+  </header>
+
+  <div id="halt-banner" hidden>
+    <strong>SYSTEM HALTED.</strong> Every scheduled trigger is deleted and all AI, video, CMS and social API calls are blocked. Nothing runs until you resume.
+  </div>
+
+  <div id="layout">
+    <nav id="sidebar" aria-label="Sections">
+      <button class="nav-item active" data-view="dashboard"><span class="nav-ico">◔</span>Performance</button>
+      <button class="nav-item" data-view="tools"><span class="nav-ico">⏻</span>Tool Controls</button>
+      <button class="nav-item" data-view="agent"><span class="nav-ico">⚙</span>Agent Control</button>
+      <button class="nav-item" data-view="studio"><span class="nav-ico">▤</span>Content Studio<span class="badge" id="studio-badge" hidden></span></button>
+      <button class="nav-item" data-view="settings"><span class="nav-ico">⌁</span>Settings &amp; Setup</button>
+      <div class="sidebar-foot" id="sidebar-foot"></div>
+    </nav>
+
+    <main id="main">
+      <section class="view" id="view-dashboard"></section>
+      <section class="view" id="view-tools" hidden></section>
+      <section class="view" id="view-agent" hidden></section>
+      <section class="view" id="view-studio" hidden></section>
+      <section class="view" id="view-settings" hidden></section>
+    </main>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+
+  <script src="node_modules/chart.js/dist/chart.umd.min.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
