@@ -13,7 +13,8 @@
     "icons": "node scripts/make-icons.js",
     "build:mac": "electron-builder --mac dmg --arm64 --x64",
     "build:mac:universal": "electron-builder --mac dmg --universal",
-    "pack": "electron-builder --mac --dir"
+    "pack": "electron-builder --mac --dir",
+    "install:mac": "bash scripts/install-mac.sh"
   },
   "dependencies": {
     "chart.js": "^4.6.1"
@@ -25,7 +26,7 @@
   "build": {
     "appId": "com.nodetelehealth.marketing",
     "productName": "NodeTelehealth Marketing",
-    "copyright": "Copyright © NodeTelehealth",
+    "copyright": "Copyright \u00a9 NodeTelehealth",
     "directories": {
       "output": "dist",
       "buildResources": "build"

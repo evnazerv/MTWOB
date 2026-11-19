@@ -315,6 +315,60 @@ function registerIpc() {
   ipcMain.handle('notify', (_e, title, body) => notify(String(title), String(body || '')));
 }
 
+/* ───────────────────────── Install helpers (packaged macOS app only) ───────────────────────── */
+
+/** …/NodeTelehealth Marketing.app/Contents/MacOS/<exe> → …/NodeTelehealth Marketing.app */
+const appBundlePath = () => path.resolve(app.getPath('exe'), '..', '..', '..');
+
+/**
+ * Puts a "NodeTelehealth Marketing" icon on the Desktop (a symlink to the installed app, which
+ * Finder shows with the app's own icon). Never overwrites a real file of the same name.
+ */
+function createDesktopShortcut(announce) {
+  const link = path.join(app.getPath('desktop'), app.getName() + '.app');
+  try {
+    let st = null;
+    try { st = fs.lstatSync(link); } catch (e) { st = null; }
+    if (st && !st.isSymbolicLink()) {
+      if (announce) dialog.showMessageBox({ type: 'info', message: 'Something named "' + path.basename(link) + '" is already on your Desktop, so no shortcut was added.' });
+      return false;
+    }
+    if (st) fs.unlinkSync(link);
+    fs.symlinkSync(appBundlePath(), link);
+    if (announce) notify('Desktop shortcut created', 'Double-click "' + app.getName() + '" on your Desktop to open the app.');
+    return true;
+  } catch (err) {
+    if (announce) dialog.showErrorBox('Desktop shortcut', 'Could not create the Desktop shortcut: ' + err.message + '\n\nIf macOS asked for access to your Desktop folder, allow it and try again from System → Create Desktop Shortcut.');
+    return false;
+  }
+}
+
+/**
+ * First launch of the packaged app: offer to move itself into Applications (when opened from the
+ * .dmg or Downloads), then add the Desktop shortcut once. Returns true if the app is relaunching.
+ */
+function firstRunInstall() {
+  if (!app.isPackaged || process.platform !== 'darwin') return false;
+  if (!app.isInApplicationsFolder()) {
+    const choice = dialog.showMessageBoxSync({
+      type: 'question', buttons: ['Move to Applications', 'Not Now'], defaultId: 0, cancelId: 1,
+      message: 'Move NodeTelehealth Marketing to your Applications folder?',
+      detail: 'This installs the app properly and adds a shortcut to your Desktop.'
+    });
+    if (choice === 0) {
+      try { if (app.moveToApplicationsFolder()) return true; } // relaunches from /Applications
+      catch (err) { dialog.showErrorBox('Move to Applications', err.message); }
+    }
+    return false;
+  }
+  const flag = path.join(app.getPath('userData'), 'desktop-shortcut.done');
+  if (!fs.existsSync(flag)) {
+    createDesktopShortcut(false);
+    try { fs.mkdirSync(path.dirname(flag), { recursive: true }); fs.writeFileSync(flag, new Date().toISOString()); } catch (e) { /* retried next launch */ }
+  }
+  return false;
+}
+
 /* ───────────────────────── App lifecycle ───────────────────────── */
 
 if (!app.requestSingleInstanceLock()) {
@@ -322,6 +376,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', showWindow);
   app.whenReady().then(() => {
+    if (firstRunInstall()) return;
     registerIpc();
     createWindow();
     tray = new Tray(trayImage(false));
@@ -335,7 +390,9 @@ if (!app.requestSingleInstanceLock()) {
           { label: 'EMERGENCY HARD OFF…', accelerator: 'Cmd+Shift+K', click: () => toggleKillSwitch(true) },
           { label: 'Resume System…', click: () => toggleKillSwitch(false) },
           { type: 'separator' },
-          { label: 'Refresh Status', accelerator: 'Cmd+R', click: heartbeat }
+          { label: 'Refresh Status', accelerator: 'Cmd+R', click: heartbeat },
+          { type: 'separator' },
+          { label: 'Create Desktop Shortcut', enabled: app.isPackaged, click: () => createDesktopShortcut(true) }
         ] },
         { role: 'windowMenu' }
       ]));
