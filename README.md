@@ -1,6 +1,6 @@
 # NodeTelehealth Marketing Automation
 
-A macOS desktop control center (Electron) for a serverless Google Apps Script backend that plans, writes, renders and publishes Florida-only organic marketing for **nodetelehealth.com**: blog posts (WordPress / Webflow), short vertical videos (ElevenLabs + HeyGen or Creatomate) and social posts.
+A macOS desktop control center (Electron) for a serverless Google Apps Script backend that plans, writes, renders and publishes Florida-only organic marketing for **nodetelehealth.com**: blog posts (Wix / WordPress / Webflow), short vertical videos (ElevenLabs + HeyGen or Creatomate) and social posts.
 
 ```
 MTWOB/
@@ -11,7 +11,7 @@ MTWOB/
 │   ├── GuardManager.gs          Kill switch, tool toggles, trigger teardown/restore, guarded HTTP wrapper
 │   ├── ClaudeAgent.gs           Anthropic API client, compliance guardrails, blog/social/video generators
 │   ├── ContentQueue.gs          Planning, queue state machine, generate + publish cycles
-│   ├── CMSPublisher.gs          WordPress REST v2, Webflow CMS Data API v2, webhook adapter
+│   ├── CMSPublisher.gs          Wix Blog v3, WordPress REST v2, Webflow CMS Data API v2, webhook adapter
 │   ├── VideoPipeline.gs         ElevenLabs TTS, HeyGen, Creatomate / JSON2Video, async render poller
 │   ├── SocialPublishers.gs      Facebook, Instagram Reels, X, LinkedIn, YouTube Shorts, TikTok, Google Business
 │   ├── AnalyticsSync.gs         Metrics + cost harvester, dashboard aggregator
@@ -104,6 +104,17 @@ npm start                 # paste them into Settings & Setup
 In the app, **Settings & Setup** walks through seven steps: backend URL + token, Claude, CMS, ElevenLabs, video, social tokens, GA4. API keys are sent once to the backend and stored in `ScriptProperties`; the app only ever gets back "saved ••••1234". The Mac stores just the URL and the handshake token (encrypted with the Keychain).
 
 Then switch on the tools you want in **Tool Controls**.
+
+### Wix Blog (nodetelehealth.com)
+
+nodetelehealth.com is a Wix site with Wix Blog installed, so choose **Wix** as the CMS provider.
+
+1. **API key:** open <https://manage.wix.com/account/api-keys> → **Generate API Key**. Name it `NodeTelehealth Marketing`. Under site access choose only the NodeTelehealth site. Under permissions enable **Wix Blog**, **Members & Contacts** and **Media Manager**. Copy the key (it is shown once).
+2. **Site ID:** open the site's Wix dashboard; the ID is the long code after `/dashboard/` in the address bar.
+3. **Author email:** the login email of a site member who will appear as the author of every post. If that person isn't a site member yet, log in to the site's Members Area once with that email.
+4. In the app: **Settings & Setup → Blog CMS → CMS provider: Wix**, fill in the three fields, click **Save & Test**.
+
+Articles are converted to Wix rich content by Wix's own converter. Each post gets the SEO title, meta description, focus keyword and FAQ structured data, tags, a category named after its content pillar, and a cover image from `Blog_Covers` when one exists. In Approval mode posts appear in **Wix dashboard → Blog → Drafts**.
 
 ### WordPress application password
 

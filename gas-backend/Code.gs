@@ -47,6 +47,7 @@ var SECRET_FIELDS = {
   WP_SITE_URL: false, WP_USERNAME: false, WP_APP_PASSWORD: true,
   WEBFLOW_API_TOKEN: true, WEBFLOW_COLLECTION_ID: false, WEBFLOW_SITE_URL: false,
   CMS_WEBHOOK_URL: true,
+  WIX_API_KEY: true, WIX_SITE_ID: false, WIX_AUTHOR_EMAIL: false,
   ELEVENLABS_API_KEY: true, ELEVENLABS_VOICE_ID: false,
   HEYGEN_API_KEY: true, HEYGEN_AVATAR_ID: false, HEYGEN_VOICE_ID: false,
   CREATOMATE_API_KEY: true, CREATOMATE_TEMPLATE_ID: false,
@@ -66,7 +67,7 @@ function defaultConfig_() {
     workflow_mode: 'APPROVAL',            // AUTONOMOUS | APPROVAL
     video_mode: 'SCRIPT_ONLY',            // HEYGEN_AVATAR | FACELESS_BROLL | SCRIPT_ONLY
     faceless_provider: 'CREATOMATE',      // CREATOMATE | JSON2VIDEO
-    cms_provider: 'WORDPRESS',            // WORDPRESS | WEBFLOW | WEBHOOK
+    cms_provider: 'WIX',                  // WIX | WORDPRESS | WEBFLOW | WEBHOOK
     claude_model: 'claude-sonnet-4-6',    // claude-sonnet-4-6 | claude-opus-4-6
     elevenlabs_model: 'eleven_flash_v2_5',// eleven_flash_v2_5 | eleven_turbo_v2_5
     cta_url: 'https://nodetelehealth.com/', // where blog/social calls to action point
@@ -161,7 +162,7 @@ function saveConfig(payload) {
     workflow_mode: ['AUTONOMOUS', 'APPROVAL'],
     video_mode: ['HEYGEN_AVATAR', 'FACELESS_BROLL', 'SCRIPT_ONLY'],
     faceless_provider: ['CREATOMATE', 'JSON2VIDEO'],
-    cms_provider: ['WORDPRESS', 'WEBFLOW', 'WEBHOOK'],
+    cms_provider: ['WIX', 'WORDPRESS', 'WEBFLOW', 'WEBHOOK'],
     claude_model: ['claude-sonnet-4-6', 'claude-opus-4-6'],
     elevenlabs_model: ['eleven_flash_v2_5', 'eleven_turbo_v2_5']
   };
@@ -488,7 +489,7 @@ function testConnection(payload) {
   assertSystemActive();
   var service = String((payload && payload.service) || '').toUpperCase();
   var tests = {
-    CLAUDE: testClaude_, WORDPRESS: testWordPress_, WEBFLOW: testWebflow_,
+    CLAUDE: testClaude_, WIX: testWix_, WORDPRESS: testWordPress_, WEBFLOW: testWebflow_,
     ELEVENLABS: testElevenLabs_, HEYGEN: testHeyGen_, CREATOMATE: testCreatomate_,
     META: testMeta_, X_TWITTER: testX_, YOUTUBE: testYouTube_, GA4: testGA4_
   };

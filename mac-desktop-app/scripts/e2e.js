@@ -54,7 +54,7 @@ fs.mkdirSync(shots, { recursive: true });
     await page.click('text=Save & Test');
     await page.waitForSelector('.test-result.ok');
     await page.click('.step:nth-child(3)');
-    await page.waitForSelector('text=WordPress REST API');
+    await page.waitForSelector('legend:has-text("Wix Blog")');
     await shot('03-wizard-cms');
 
     step = 'dashboard';

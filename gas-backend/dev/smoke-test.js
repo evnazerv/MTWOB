@@ -41,6 +41,7 @@ test('rejects a wrong or missing handshake token and malformed bodies', () => {
   assert.strictEqual(be.post('noSuchAction').status, 404);
 });
 test('secrets are write-only and only whitelisted keys are accepted', () => {
+  ok(be.post('saveConfig', { cms_provider: 'WORDPRESS' })); // these tests cover the WordPress adapter
   ok(be.post('saveSecrets', { CLAUDE_API_KEY: 'sk-ant-test-1234', MASTER_KILL_SWITCH: 'ON', HANDSHAKE_TOKEN: 'x', WP_SITE_URL: 'https://nodetelehealth.com', WP_USERNAME: 'admin', WP_APP_PASSWORD: 'abcd efgh ijkl' }));
   assert.strictEqual(be.store.props.MASTER_KILL_SWITCH, 'OFF');
   assert.notStrictEqual(be.store.props.HANDSHAKE_TOKEN, 'x');
@@ -160,6 +161,39 @@ test('faceless mode (Creatomate + Pexels b-roll) renders through the same poller
   const done = ok(be.post('getQueueItem', { id: v.id }));
   assert.strictEqual(done.status, 'READY_TO_PUBLISH');
   assert.strictEqual(done.approved, true); // autonomous
+});
+
+console.log('Wix Blog');
+test('Wix: approval mode sends a draft; Publish Now takes it live with SEO, tags, category and author', () => {
+  ok(be.post('saveConfig', { cms_provider: 'WIX', workflow_mode: 'APPROVAL' }));
+  const tools = ok(be.post('getToolStates'));
+  assert.strictEqual(tools.find((t) => t.key === 'TOGGLE_BLOG_CMS').status, 'Missing API Key');
+  ok(be.post('saveSecrets', { WIX_API_KEY: 'IST.fake', WIX_SITE_ID: '236ade3d-5395-424f-a2a6-f507b60c7a6f', WIX_AUTHOR_EMAIL: 'Info@NodeTelehealth.com' }));
+  assert.strictEqual(ok(be.post('testConnection', { service: 'WIX' })).ok, true);
+  const covers = Object.values(be.store.folders).find((f) => f.name === 'Blog_Covers');
+  be.store.files['cover1'] = { id: 'cover1', name: 'cover.jpg', bytes: Buffer.alloc(10), type: 'image/jpeg', parent: covers.id };
+  const blog = ok(be.post('generateOnDemand', { type: 'BLOG' })).created[0];
+  // make the article longer than Wix's 10,000-character conversion limit to exercise splitting
+  const long = ok(be.post('getQueueItem', { id: blog.id })).payload.html_body + Array.from({ length: 40 }, (_, i) => '<h2>Section ' + i + '</h2><p>' + 'Florida telehealth text. '.repeat(20) + '</p>').join('');
+  ok(be.post('updateQueueItem', { id: blog.id, payload: { html_body: long } }));
+  ok(be.post('runPublishNow'));
+  const draft = ok(be.post('getQueueItem', { id: blog.id }));
+  assert.strictEqual(draft.status, 'CMS_DRAFT');
+  const w = be.store.wix, post = w.posts[draft.cms_id];
+  assert.ok(post && !post.live, 'draft created, not live');
+  assert.strictEqual(post.draft.memberId, 'mem-1');
+  assert.ok(post.draft.richContent.nodes.length > 40, 'all converted chunks joined');
+  assert.ok(w.calls.filter((c) => c.path.endsWith('/convert/to-ricos')).length >= 2, 'long article split into several conversions');
+  assert.ok(post.draft.seoData.tags.some((t) => t.type === 'meta' && t.props.name === 'description'));
+  assert.ok(post.draft.seoData.tags.some((t) => t.type === 'script'), 'FAQ JSON-LD included');
+  assert.ok(post.draft.tagIds.length >= 3 && post.draft.categoryIds.length === 1);
+  assert.ok(post.draft.media.wixMedia.image.id, 'cover image imported');
+  assert.ok(w.calls.every((c) => c.auth === 'IST.fake' && c.site === '236ade3d-5395-424f-a2a6-f507b60c7a6f'));
+  const live = ok(be.post('publishNow', { id: blog.id }));
+  assert.strictEqual(live.status, 'PUBLISHED');
+  assert.ok(post.live);
+  assert.strictEqual(live.published_url, 'https://www.nodetelehealth.com/post/' + post.draft.seoSlug);
+  ok(be.post('saveConfig', { workflow_mode: 'AUTONOMOUS' }));
 });
 
 console.log('Kill switch');

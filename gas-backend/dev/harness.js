@@ -283,6 +283,37 @@ function defaultFakeFetch(url, opts, store) {
     }
     return { code: 200, body: { rows } };
   }
+  if (host === 'www.wixapis.com') {
+    const wix = store.wix || (store.wix = { posts: {}, tags: {}, categories: [], calls: [] });
+    const h = opts.headers || {};
+    wix.calls.push({ method, path: p, auth: h.Authorization, site: h['wix-site-id'] });
+    if (!h.Authorization || !h['wix-site-id']) return { code: 401, body: { message: 'missing auth' } };
+    if (p === '/members/v1/members/query') return { code: 200, body: { members: [{ id: 'mem-1', loginEmail: 'info@nodetelehealth.com', profile: { nickname: 'NODE Telehealth' } }], metadata: { total: 1 } } };
+    if (p === '/ricos/v1/ricos-document/convert/to-ricos') {
+      const html = json().html || '';
+      if (html.length > 10000) return { code: 400, body: { message: 'html exceeds 10000 characters' } };
+      return { code: 200, body: { document: { nodes: (html.match(/<(h2|h3|p|ul)[\s>]/gi) || []).map((t) => ({ type: /h/i.test(t) ? 'HEADING' : 'PARAGRAPH', nodes: [] })) } } };
+    }
+    if (p === '/blog/v3/tags') { const l = json().label; wix.tags[l] = wix.tags[l] || 'tag-' + id(); return { code: 200, body: { tag: { id: wix.tags[l], label: l } } }; }
+    if (p === '/blog/v3/categories') {
+      if (method === 'get') return { code: 200, body: { categories: wix.categories } };
+      const c = { id: 'cat-' + id(), label: json().category.label }; wix.categories.push(c); return { code: 200, body: { category: c } };
+    }
+    if (p === '/site-media/v1/files/import') return { code: 200, body: { file: { id: 'img_' + id() + '~mv2.jpg', operationStatus: 'PENDING' } } };
+    if (p === '/blog/v3/draft-posts' && method === 'post') {
+      const b = json(); const pid = 'post-' + id();
+      if (!b.draftPost.memberId) return { code: 400, body: { message: 'Missing post owner information' } };
+      wix.posts[pid] = { draft: b.draftPost, live: !!b.publish };
+      return { code: 200, body: { draftPost: { id: pid, title: b.draftPost.title, status: 'UNPUBLISHED', url: { base: 'https://www.nodetelehealth.com', path: '/post/' + pid + '/preview' } } } };
+    }
+    const m = p.match(/^\/blog\/v3\/draft-posts\/([^/]+)(\/publish)?$/);
+    if (m && wix.posts[m[1]]) {
+      if (m[2]) { wix.posts[m[1]].live = true; return { code: 200, body: { postId: m[1] } }; }
+      Object.assign(wix.posts[m[1]].draft, json().draftPost); return { code: 200, body: { draftPost: { id: m[1] } } };
+    }
+    const g = p.match(/^\/blog\/v3\/posts\/([^/]+)$/);
+    if (g) return wix.posts[g[1]] && wix.posts[g[1]].live ? { code: 200, body: { post: { id: g[1], url: { base: 'https://www.nodetelehealth.com', path: '/post/' + wix.posts[g[1]].draft.seoSlug } } } } : { code: 404, body: {} };
+  }
   if (host === 'hooks.fake') return { code: 200, body: { id: 'hook_' + id(), url: 'https://example.invalid/post' } };
   return null;
 }

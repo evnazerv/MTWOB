@@ -16,7 +16,7 @@ var TRIGGER_HANDLERS = ['cronGenerateContent', 'cronPublishScheduled', 'cronPoll
 
 function toolRegistry_() {
   var cfg = getConfig();
-  var cms = { WORDPRESS: [['WP_SITE_URL', 'WP_USERNAME', 'WP_APP_PASSWORD', 'CLAUDE_API_KEY']], WEBFLOW: [['WEBFLOW_API_TOKEN', 'WEBFLOW_COLLECTION_ID', 'CLAUDE_API_KEY']], WEBHOOK: [['CMS_WEBHOOK_URL', 'CLAUDE_API_KEY']] }[cfg.cms_provider];
+  var cms = { WIX: [['WIX_API_KEY', 'WIX_SITE_ID', 'WIX_AUTHOR_EMAIL', 'CLAUDE_API_KEY']], WORDPRESS: [['WP_SITE_URL', 'WP_USERNAME', 'WP_APP_PASSWORD', 'CLAUDE_API_KEY']], WEBFLOW: [['WEBFLOW_API_TOKEN', 'WEBFLOW_COLLECTION_ID', 'CLAUDE_API_KEY']], WEBHOOK: [['CMS_WEBHOOK_URL', 'CLAUDE_API_KEY']] }[cfg.cms_provider];
   var video = cfg.video_mode === 'HEYGEN_AVATAR' ? [['HEYGEN_API_KEY', 'HEYGEN_AVATAR_ID']]
     : cfg.video_mode === 'FACELESS_BROLL' ? (cfg.faceless_provider === 'JSON2VIDEO' ? [['JSON2VIDEO_API_KEY']] : [['CREATOMATE_API_KEY']])
     : [];

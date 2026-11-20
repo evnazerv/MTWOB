@@ -1,6 +1,7 @@
 /**
  * CMSPublisher.gs — Blog publishing adapters.
- *   CMS_PROVIDER = WORDPRESS → WordPress REST API v2 (Basic Auth with an Application Password)
+ *   CMS_PROVIDER = WIX       → Wix Blog REST API v3 (API key + wix-site-id header)
+ *                  WORDPRESS → WordPress REST API v2 (Basic Auth with an Application Password)
  *                  WEBFLOW   → Webflow CMS Data API v2 (Bearer token)
  *                  WEBHOOK   → generic JSON webhook (Make.com / Zapier / custom CMS)
  * Every adapter returns { cms_id, url, status } and supports draft and live publishing.
@@ -9,7 +10,8 @@
 function cmsPublish_(blog, live, item) {
   requireTool_('TOGGLE_BLOG_CMS');
   var provider = getConfig().cms_provider;
-  var res = provider === 'WEBFLOW' ? webflowPublish_(blog, live)
+  var res = provider === 'WIX' ? wixPublish_(blog, live, item)
+    : provider === 'WEBFLOW' ? webflowPublish_(blog, live)
     : provider === 'WEBHOOK' ? webhookCmsPublish_(blog, live, item, null)
     : wordpressPublish_(blog, live, item, null);
   logCost_({ service: provider, tool_key: 'TOGGLE_BLOG_CMS', operation: live ? 'publish' : 'draft', units: 1, unit_type: 'posts', est_cost_usd: 0, ok: true, queue_id: item && item.id });
@@ -21,7 +23,8 @@ function cmsPublish_(blog, live, item) {
 function cmsPromote_(cmsId, blog, item) {
   requireTool_('TOGGLE_BLOG_CMS');
   var provider = getConfig().cms_provider;
-  var res = provider === 'WEBFLOW' ? webflowPromote_(cmsId, blog)
+  var res = provider === 'WIX' ? wixPromote_(cmsId, blog, item)
+    : provider === 'WEBFLOW' ? webflowPromote_(cmsId, blog)
     : provider === 'WEBHOOK' ? webhookCmsPublish_(blog, true, item, cmsId)
     : wordpressPublish_(blog, true, item, cmsId);
   recordToolRun_('TOGGLE_BLOG_CMS', 1, 'posts', 0);
@@ -188,4 +191,193 @@ function webhookCmsPublish_(blog, live, item, existingId) {
   });
   var j = res.json || {};
   return { cms_id: String(j.id || existingId || blog.slug), url: j.url || (APP.SITE + '/blog/' + blog.slug), status: live ? 'publish' : 'draft' };
+}
+
+/* ───────────────────────────── Wix Blog (REST v3) ─────────────────────────────
+ * Auth: an account API key (Wix dashboard → API Keys Manager) in the Authorization header,
+ * plus the target site in the wix-site-id header.
+ * Posts need an author: the site member whose login email is WIX_AUTHOR_EMAIL.
+ * Article HTML is converted to Wix rich content (Ricos) by Wix's own converter.
+ */
+
+var WIX_API = 'https://www.wixapis.com';
+var WIX_RICOS_PLUGINS = ['HEADING', 'LINK', 'DIVIDER', 'INDENT', 'LINE_SPACING'];
+
+function wixConfig_() {
+  var key = getProp_('WIX_API_KEY', ''), site = getProp_('WIX_SITE_ID', '');
+  if (!key || !site) throw appError_(412, 'MISSING_API_KEY', 'Wix API key and site ID are required');
+  return { headers: { Authorization: key, 'wix-site-id': site } };
+}
+
+/** toolKey undefined → TOGGLE_BLOG_CMS; null → only the kill switch is checked (connection test). */
+function wixRequest_(wx, method, path, body, toolKey) {
+  var opts = { method: method, headers: wx.headers };
+  if (body !== undefined) { opts.contentType = 'application/json'; opts.payload = JSON.stringify(body); }
+  return fetchJson_(toolKey === undefined ? 'TOGGLE_BLOG_CMS' : toolKey, 'WIX', WIX_API + path, opts).json || {};
+}
+
+/** Member ID of the blog author (looked up by login email once, then cached). */
+function wixAuthor_(wx, toolKey) {
+  var email = String(getProp_('WIX_AUTHOR_EMAIL', '')).trim().toLowerCase();
+  if (!email) throw appError_(412, 'MISSING_API_KEY', 'Set the blog author\'s login email (WIX_AUTHOR_EMAIL)');
+  var cache = getJsonProp_('WIX_AUTHOR_CACHE', {});
+  if (cache.email === email && cache.id) return cache;
+  var r = wixRequest_(wx, 'post', '/members/v1/members/query', { query: { filter: { loginEmail: email } }, fieldsets: ['FULL'] }, toolKey);
+  var member = (r.members || [])[0] || null;
+  // Newly created members can be missing from filtered queries for a while: scan the list as a fallback.
+  for (var offset = 0; !member && offset < 1000; offset += 100) {
+    var page = wixRequest_(wx, 'post', '/members/v1/members/query', { query: { paging: { limit: 100, offset: offset } }, fieldsets: ['FULL'] }, toolKey);
+    (page.members || []).some(function (m) { if (String(m.loginEmail || '').toLowerCase() === email) { member = m; return true; } return false; });
+    if (!page.members || page.members.length < 100) break;
+  }
+  if (!member) {
+    throw appError_(412, 'WIX_AUTHOR_NOT_FOUND', 'No site member logs in with ' + email + '. Log in to nodetelehealth.com\'s Members Area once with that email (or pick an email that already has), then try again.');
+  }
+  var out = { email: email, id: member.id, name: (member.profile && member.profile.nickname) || email };
+  setJsonProp_('WIX_AUTHOR_CACHE', out);
+  return out;
+}
+
+/** Splits HTML at section boundaries into pieces under Wix's 10,000-character conversion limit. */
+function splitHtml_(html, max) {
+  var pieces = [];
+  String(html).split(/(?=<h[23][\s>])/i).forEach(function (section) {
+    if (section.length <= max) { pieces.push(section); return; }
+    section.split(/(?<=<\/(?:p|ul|ol|blockquote|h3)>)/i).forEach(function (p) { pieces.push(p); });
+  });
+  var out = [], cur = '';
+  pieces.forEach(function (p) {
+    if (cur && cur.length + p.length > max) { out.push(cur); cur = ''; }
+    cur += p;
+  });
+  if (cur) out.push(cur);
+  return out.filter(function (s) { return s.trim(); });
+}
+
+function wixRichContent_(wx, html) {
+  var nodes = [];
+  splitHtml_(html, 9000).forEach(function (part) {
+    var r = wixRequest_(wx, 'post', '/ricos/v1/ricos-document/convert/to-ricos', { html: part, options: { plugins: WIX_RICOS_PLUGINS } });
+    nodes = nodes.concat((r.document && r.document.nodes) || []);
+  });
+  if (!nodes.length) throw appError_(502, 'UPSTREAM_ERROR', 'Wix returned empty rich content for this article');
+  return { nodes: nodes };
+}
+
+function wixTagIds_(wx, labels) {
+  var ids = [];
+  (labels || []).slice(0, 30).forEach(function (label) {
+    label = String(label).trim().slice(0, 50);
+    if (!label) return;
+    try {
+      var r = wixRequest_(wx, 'post', '/blog/v3/tags', { label: label }); // returns the existing tag when the label exists
+      if (r.tag && r.tag.id && ids.indexOf(r.tag.id) === -1) ids.push(r.tag.id);
+    } catch (e) { if (e.code === 'SYSTEM_HALTED' || e.code === 'TOOL_DISABLED') throw e; }
+  });
+  return ids;
+}
+
+/** Category named after the content pillar; created once when missing (Create Category does not de-duplicate). */
+function wixCategoryIds_(wx, label) {
+  if (!label) return [];
+  try {
+    var list = wixRequest_(wx, 'get', '/blog/v3/categories');
+    var match = (list.categories || []).filter(function (c) { return String(c.label).toLowerCase() === label.toLowerCase(); })[0];
+    if (match) return [match.id];
+    var made = wixRequest_(wx, 'post', '/blog/v3/categories', { category: { label: label } });
+    return made.category && made.category.id ? [made.category.id] : [];
+  } catch (e) {
+    if (e.code === 'SYSTEM_HALTED' || e.code === 'TOOL_DISABLED') throw e;
+    return [];
+  }
+}
+
+/** Imports a random image from Drive/Blog_Covers into the Wix Media Manager; null when none or on failure. */
+function wixCoverMedia_(wx, title) {
+  try {
+    var cover = pickCoverImage_();
+    if (!cover) return null;
+    var r = wixRequest_(wx, 'post', '/site-media/v1/files/import', { url: cover.url, mediaType: 'IMAGE', displayName: cover.file.getName() });
+    if (!r.file || !r.file.id) return null;
+    return { wixMedia: { image: { id: r.file.id } }, displayed: true, custom: true, altText: String(title).slice(0, 1000) };
+  } catch (e) {
+    if (e.code === 'SYSTEM_HALTED' || e.code === 'TOOL_DISABLED') throw e;
+    return null;
+  }
+}
+
+function wixSeoData_(blog) {
+  var tags = [
+    { type: 'title', children: blog.title },
+    { type: 'meta', props: { name: 'description', content: blog.meta_description } }
+  ];
+  if (blog.faq_jsonld) tags.push({ type: 'script', props: { type: 'application/ld+json' }, children: blog.faq_jsonld });
+  return { tags: tags, settings: { keywords: [{ term: blog.focus_keyword, isMain: true }] } };
+}
+
+function wixDraftFields_(wx, blog, author) {
+  return {
+    title: String(blog.title).slice(0, 200),
+    memberId: author.id,
+    excerpt: String(blog.excerpt || '').slice(0, 500),
+    seoSlug: String(blog.slug || '').slice(0, 100),
+    richContent: wixRichContent_(wx, blog.html_body),
+    seoData: wixSeoData_(blog)
+  };
+}
+
+/** Sends the request; if Wix rejects the SEO block, retries once without it so the post still goes out. */
+function wixWithSeoFallback_(send, draft) {
+  try { return send(draft); }
+  catch (e) {
+    if (e.code !== 'UPSTREAM_ERROR' || !/seo/i.test(e.message)) throw e;
+    delete draft.seoData;
+    return send(draft);
+  }
+}
+
+function wixLiveUrl_(wx, postId, slug) {
+  try {
+    var r = wixRequest_(wx, 'get', '/blog/v3/posts/' + encodeURIComponent(postId) + '?fieldsets=URL');
+    if (r.post && r.post.url && r.post.url.base) return trimSlash_(r.post.url.base) + (r.post.url.path || '');
+  } catch (e) { if (e.code === 'SYSTEM_HALTED' || e.code === 'TOOL_DISABLED') throw e; }
+  return APP.SITE + '/post/' + slug;
+}
+
+function wixPublish_(blog, live, item) {
+  var wx = wixConfig_();
+  var author = wixAuthor_(wx);
+  var draft = wixDraftFields_(wx, blog, author);
+  draft.tagIds = wixTagIds_(wx, blog.tags);
+  draft.categoryIds = wixCategoryIds_(wx, item && item.pillar);
+  var media = wixCoverMedia_(wx, blog.title);
+  if (media) draft.media = media;
+  var res = wixWithSeoFallback_(function (d) {
+    return wixRequest_(wx, 'post', '/blog/v3/draft-posts', { draftPost: d, publish: !!live, fieldsets: ['URL'] });
+  }, draft);
+  var id = res.draftPost && res.draftPost.id;
+  if (!id) throw appError_(502, 'UPSTREAM_ERROR', 'Wix did not return a post id');
+  if (live) return { cms_id: id, url: wixLiveUrl_(wx, id, blog.slug), status: 'publish' };
+  var preview = res.draftPost.url && res.draftPost.url.base ? trimSlash_(res.draftPost.url.base) + (res.draftPost.url.path || '') : '';
+  return { cms_id: id, url: preview, status: 'draft' };
+}
+
+/** Saves the latest (possibly edited) content into the Wix draft, then publishes it. */
+function wixPromote_(postId, blog) {
+  var wx = wixConfig_();
+  var author = wixAuthor_(wx);
+  var draft = wixDraftFields_(wx, blog, author);
+  draft.id = postId;
+  wixWithSeoFallback_(function (d) {
+    return wixRequest_(wx, 'patch', '/blog/v3/draft-posts/' + encodeURIComponent(postId), { draftPost: d });
+  }, draft);
+  wixRequest_(wx, 'post', '/blog/v3/draft-posts/' + encodeURIComponent(postId) + '/publish', {});
+  return { cms_id: postId, url: wixLiveUrl_(wx, postId, blog.slug), status: 'publish' };
+}
+
+function testWix_() {
+  var wx = wixConfig_();
+  var author = wixAuthor_(wx, null);
+  var cats = wixRequest_(wx, 'get', '/blog/v3/categories', undefined, null);
+  return 'Connected to Wix Blog. Posts will be written by "' + author.name + '". ' + (cats.categories || []).length + ' existing blog categor' + ((cats.categories || []).length === 1 ? 'y.' : 'ies.');
 }

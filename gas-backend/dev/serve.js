@@ -19,7 +19,7 @@ const init = be.run('initializeSystem');
 if (process.argv.includes('--demo')) {
   const post = (a, p) => { const r = be.post(a, p); if (!r.ok) console.warn('demo seed:', a, r.error); return r.data; };
   post('saveSecrets', {
-    CLAUDE_API_KEY: 'sk-ant-demo-0000', WP_SITE_URL: 'https://nodetelehealth.com', WP_USERNAME: 'demo', WP_APP_PASSWORD: 'demo demo demo',
+    CLAUDE_API_KEY: 'sk-ant-demo-0000', WIX_API_KEY: 'IST.demo', WIX_SITE_ID: 'demo-site', WIX_AUTHOR_EMAIL: 'info@nodetelehealth.com', WP_SITE_URL: 'https://nodetelehealth.com', WP_USERNAME: 'demo', WP_APP_PASSWORD: 'demo demo demo',
     ELEVENLABS_API_KEY: 'demo', ELEVENLABS_VOICE_ID: 'demo-voice', HEYGEN_API_KEY: 'demo', HEYGEN_AVATAR_ID: 'demo-avatar', CREATOMATE_API_KEY: 'demo', PEXELS_API_KEY: 'demo',
     META_PAGE_ID: '1111', META_PAGE_ACCESS_TOKEN: 'demo', IG_USER_ID: '1784', X_API_KEY: 'k', X_API_SECRET: 's', X_ACCESS_TOKEN: 't', X_ACCESS_SECRET: 'ts',
     LINKEDIN_ACCESS_TOKEN: 'demo', LINKEDIN_ORG_ID: '42', GA4_PROPERTY_ID: '123456'
